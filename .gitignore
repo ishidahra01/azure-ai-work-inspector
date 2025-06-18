@@ -169,3 +169,12 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# custom
+keyframes/
+aoai_output_frames/
+data/
+notebooks/
+experiments/
+*.ipynb_checkpoints/
+results
