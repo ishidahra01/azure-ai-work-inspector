@@ -14,13 +14,7 @@ BLOB_CONTAINER_NAME = os.getenv("BLOB_CONTAINER_NAME")
 # Azure OpenAI configuration
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
-AZURE_OPENAI_ENDPOINT_O1 = os.getenv("AZURE_OPENAI_ENDPOINT_O1")
-AZURE_OPENAI_API_KEY_O1 = os.getenv("AZURE_OPENAI_API_KEY_O1")
-AOAI_API_VERSION_O1 = '2024-12-01-preview'
-
-# Azure Vision API configuration
-AZURE_AI_VISION_API_KEY = os.getenv("AZURE_AI_VISION_API_KEY")
-AZURE_AI_VISION_ENDPOINT = os.getenv("AZURE_AI_VISION_ENDPOINT")
+AOAI_API_VERSION = '2024-12-01-preview'
 
 def get_blob_service_client():
     """Returns a BlobServiceClient instance."""
@@ -63,9 +57,9 @@ def upload_to_blob(file_path, blob_name):
 def get_openai_client():
     """Returns an AzureOpenAI client instance for GPT-4o model."""
     client = AzureOpenAI(
-        azure_endpoint=AZURE_OPENAI_ENDPOINT_O1,
-        api_key=AZURE_OPENAI_API_KEY_O1,
-        api_version=AOAI_API_VERSION_O1
+        azure_endpoint=AZURE_OPENAI_ENDPOINT,
+        api_key=AZURE_OPENAI_API_KEY,
+        api_version=AOAI_API_VERSION
     )
     return client
 
@@ -212,7 +206,7 @@ def generate_final_report(filtered_data, task_name="battery exchange"):
     """
 
     response = client.chat.completions.create(
-        model="gpt-4.1",  # Use appropriate model deployment name
+        model="o3",  # Use appropriate model deployment name
         messages=[
             {"role": "developer", "content": developer_message},
             {"role": "user", "content": str(filtered_data)},
