@@ -211,7 +211,7 @@ def generate_final_report(filtered_data, task_name="battery exchange"):
             {"role": "developer", "content": developer_message},
             {"role": "user", "content": str(filtered_data)},
         ],
-        max_tokens=10000,  # Adjust as needed
+        max_completion_tokens=10000,  # Adjust as needed
     )
 
     return response.choices[0].message.content
