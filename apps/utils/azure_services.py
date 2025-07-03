@@ -206,7 +206,7 @@ def generate_final_report(filtered_data, task_name="battery exchange"):
     """
 
     response = client.chat.completions.create(
-        model="o3",  # Use appropriate model deployment name
+        model="o4-mini",  # Use appropriate model deployment name
         messages=[
             {"role": "developer", "content": developer_message},
             {"role": "user", "content": str(filtered_data)},
