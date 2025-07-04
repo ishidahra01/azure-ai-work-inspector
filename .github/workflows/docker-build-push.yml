@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY_NAME: regivideoanalysisadevje
+  REGISTRY_NAME: aiworkinspectoracr
   REPOSITORY_NAME: azure-ai-work-inspector
   IMAGE_TAG: ${{ github.sha }}
 
