@@ -64,7 +64,7 @@ def save_metadata(metadata, result_dir, video_filename):
         json.dump(metadata, f, ensure_ascii=False, indent=4)
     return metadata_path
 
-def save_final_report(metadata, result_dir, video_filename, task_name="battery exchange"):
+def save_final_report(metadata, result_dir, video_filename, task_name="battery exchange", custom_report_prompt=None):
     """
     Generate and save a final analysis report.
     
@@ -73,6 +73,7 @@ def save_final_report(metadata, result_dir, video_filename, task_name="battery e
         result_dir: Directory to save the report
         video_filename: Name of the processed video
         task_name: Name of the task in the video
+        custom_report_prompt: Optional custom system prompt for report generation
         
     Returns:
         str: Path to the saved report file
@@ -86,7 +87,7 @@ def save_final_report(metadata, result_dir, video_filename, task_name="battery e
             frame.pop('frame_url_with_sas', None)
     
     # Generate the report
-    report_content = generate_final_report(filtered_data, task_name)
+    report_content = generate_final_report(filtered_data, task_name, custom_report_prompt)
     
     # Save the report
     report_path = os.path.join(result_dir, f"{video_filename}_report.md")

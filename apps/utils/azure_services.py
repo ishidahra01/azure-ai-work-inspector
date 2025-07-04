@@ -63,63 +63,7 @@ def get_openai_client():
     )
     return client
 
-def create_caption_by_gpt_multi(image_infos):
-    """
-    Generate captions for multiple frames using GPT-4o.
-    
-    Args:
-        image_infos: List of dictionaries with frame information (url, frame_number, timestamp)
-        
-    Returns:
-        str: Generated caption
-    """
-    client = get_openai_client()
-    
-    system_message = """
-    You are an expert in analyzing vehicle inspection procedures from video footage.  
-    Given a set of frames extracted from a continuous video, along with descriptions of prior tasks already completed, your tasks are as follows:
-
-    - Describe the sequence of actions observed in the frames, including the time taken for each action and any notable changes in the inspection process.
-    - Identify inefficient movements or suboptimal work methods observed during the inspection process and propose concrete improvements.
-    - Discover implicit knowledge and expert techniques demonstrated by experienced workers that may not be documented but contribute to efficient task execution.
-
-    You should focus on the following aspects:
-    - Analyze the sequence as a time-continuous process, not as isolated frames.
-    - Consider temporal consistency and motion cues to understand how the inspection unfolds.
-    - Take into account the context of previously completed tasks to infer the purpose and position of the current action within the overall workflow.
-    - Provide a concise explanation in English (max 400 characters per task), explaining your reasoning based on observed changes across frames and the prior task context.
-    """
-
-    user_content = []
-    for idx, info in enumerate(image_infos):
-        user_content.append({
-            "type": "text",
-            "content": f"Frame {idx+1}: time={info['timestamp']:.2f} sec, frame_number={info['frame_number']}."
-        })
-        user_content.append({
-            "type": "image_url",
-            "image_url": {"url": info['url']}
-        })
-
-    messages = [
-        {"role": "system", "content": system_message},
-        {"role": "user", "content": user_content},
-    ]
-
-    completion = client.chat.completions.create(
-        model="gpt-4.1",
-        messages=messages,
-        temperature=0,
-        max_tokens=1000,
-        top_p=0.95,
-        frequency_penalty=0,
-        presence_penalty=0
-    )
-
-    caption_text = completion.choices[0].message.content
-    return caption_text
-
-def create_caption_by_gpt_with_history(image_infos, history_captions, task_name="battery exchange"):
+def create_caption_by_gpt_with_history(image_infos, history_captions, task_name="battery exchange", custom_system_prompt=None):
     """
     Generate captions for frames with context from history.
     
@@ -127,29 +71,33 @@ def create_caption_by_gpt_with_history(image_infos, history_captions, task_name=
         image_infos: List of dictionaries with frame information
         history_captions: List of previous caption texts
         task_name: Name of the task being analyzed
+        custom_system_prompt: Optional custom system prompt to override default
         
     Returns:
         str: Generated caption
     """
     client = get_openai_client()
     
-    system_message = f"""
-    You are an expert in analyzing vehicle inspection procedures from video footage, especially {task_name} tasks. 
-    Given a set of frames extracted from a continuous video, along with descriptions of prior tasks already completed, your tasks are as follows:
+    if custom_system_prompt:
+        system_message = f"{custom_system_prompt}\n\nHere is the history of captions for the previous frames:\n{history_captions}"
+    else:
+        system_message = f"""
+        You are an expert in analyzing vehicle inspection procedures from video footage, especially {task_name} tasks. 
+        Given a set of frames extracted from a continuous video, along with descriptions of prior tasks already completed, your tasks are as follows:
 
-    - Describe the sequence of actions observed in the frames, including the time taken for each action and any notable changes in the inspection process.
-    - Identify inefficient movements or suboptimal work methods observed during the inspection process and propose concrete improvements.
-    - Discover implicit knowledge and expert techniques demonstrated by experienced workers that may not be documented but contribute to efficient task execution.
+        - Describe the sequence of actions observed in the frames, including the time taken for each action and any notable changes in the inspection process.
+        - Identify inefficient movements or suboptimal work methods observed during the inspection process and propose concrete improvements.
+        - Discover implicit knowledge and expert techniques demonstrated by experienced workers that may not be documented but contribute to efficient task execution.
 
-    You should focus on the following aspects:
-    - Analyze the sequence as a time-continuous process, not as isolated frames.
-    - Consider temporal consistency and motion cues to understand how the inspection unfolds.
-    - Take into account the context of previously completed tasks to infer the purpose and position of the current action within the overall workflow.
-    - Provide a concise explanation in English (max 400 characters per task), explaining your reasoning based on observed changes across frames and the prior task context.
-    
-    Here is the history of captions for the previous frames:
-    {history_captions}
-    """
+        You should focus on the following aspects:
+        - Analyze the sequence as a time-continuous process, not as isolated frames.
+        - Consider temporal consistency and motion cues to understand how the inspection unfolds.
+        - Take into account the context of previously completed tasks to infer the purpose and position of the current action within the overall workflow.
+        - Provide a concise explanation in English (max 400 characters per task), explaining your reasoning based on observed changes across frames and the prior task context.
+        
+        Here is the history of captions for the previous frames:
+        {history_captions}
+        """
 
     user_content = []
     for idx, info in enumerate(image_infos):
@@ -179,31 +127,35 @@ def create_caption_by_gpt_with_history(image_infos, history_captions, task_name=
 
     return completion.choices[0].message.content
 
-def generate_final_report(filtered_data, task_name="battery exchange"):
+def generate_final_report(filtered_data, task_name="battery exchange", custom_system_prompt=None):
     """
     Generate a final report from all chunk data.
     
     Args:
         filtered_data: List of processed chunk data
         task_name: Name of the task being analyzed
+        custom_system_prompt: Optional custom system prompt to override default
         
     Returns:
         str: Generated report in Markdown format
     """
     client = get_openai_client()
     
-    developer_message = f"""
-    You are an expert in generating structured reports based on video analysis of vehicle inspection work, especially {task_name}.
-    Analyze the video and create a detailed report with the following instructions:
+    if custom_system_prompt:
+        developer_message = custom_system_prompt
+    else:
+        developer_message = f"""
+        You are an expert in generating structured reports based on video analysis of vehicle inspection work, especially {task_name}.
+        Analyze the video and create a detailed report with the following instructions:
 
-    - Structure the findings into clear, organized sections ("Task description"," "Inefficient Movements", "Improvement Suggestions", "Implicit Expert Knowledge").
-    - Do not omit any tasks and any insights you observe from the video. Even minor observations should be included if they provide meaningful insight.
-    - Use bullet points, subheadings, and concise descriptions to make the report easy to read and actionable.
-    - The output must be in Markdown format and in Japanese.
-    - For each reported item, include one or more corresponding time frames (e.g., 00:01:23–00:01:35) from the video as supporting evidence, to ensure traceability and allow reviewers to reference the specific moments where the observations were made.
+        - Structure the findings into clear, organized sections ("Task description"," "Inefficient Movements", "Improvement Suggestions", "Implicit Expert Knowledge").
+        - Do not omit any tasks and any insights you observe from the video. Even minor observations should be included if they provide meaningful insight.
+        - Use bullet points, subheadings, and concise descriptions to make the report easy to read and actionable.
+        - The output must be in Markdown format and in Japanese.
+        - For each reported item, include one or more corresponding time frames (e.g., 00:01:23–00:01:35) from the video as supporting evidence, to ensure traceability and allow reviewers to reference the specific moments where the observations were made.
 
-    Note: The original frame analysis results are based only on a limited time segment, so there may be inaccuracies due to missing context from preceding and following frames. Please review the full sequence of results, and revise any inconsistencies using information from the surrounding context.
-    """
+        Note: The original frame analysis results are based only on a limited time segment, so there may be inaccuracies due to missing context from preceding and following frames. Please review the full sequence of results, and revise any inconsistencies using information from the surrounding context.
+        """
 
     response = client.chat.completions.create(
         model="o4-mini",  # Use appropriate model deployment name

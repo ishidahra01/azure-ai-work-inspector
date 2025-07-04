@@ -61,6 +61,25 @@ with st.sidebar:
         interval = st.slider("Frame Interval (seconds)", min_value=1, max_value=10, value=2)
         chunk_size = st.slider("Frames per Chunk", min_value=5, max_value=30, value=15)
         task_name = st.text_input("Task Name", "battery exchange")
+    
+    # Custom prompts section
+    st.subheader("Custom Prompts (Optional)")
+    with st.container(border=True):
+        with st.expander("Frame Analysis Prompt"):
+            custom_analysis_prompt = st.text_area(
+                "Custom system prompt for frame analysis",
+                placeholder="Leave empty to use default prompt...",
+                height=100,
+                help="Override the default system prompt used for analyzing video frames"
+            )
+        
+        with st.expander("Report Generation Prompt"):
+            custom_report_prompt = st.text_area(
+                "Custom system prompt for report generation", 
+                placeholder="Leave empty to use default prompt...",
+                height=100,
+                help="Override the default system prompt used for generating the final report"
+            )
         
     # Video upload
     st.subheader("Upload Video")
@@ -89,18 +108,19 @@ with st.sidebar:
                     with open(video_save_path, 'wb') as f:
                         f.write(uploaded_file.getvalue())
                     
-                    # Process the video
+                    # Process the video with custom prompts
                     metadata = process_video_with_history(
                         video_path=video_path,
                         output_dir=os.path.join(result_dir, "frames"),
                         interval=interval,
                         chunk_size=chunk_size,
-                        task_name=task_name
+                        task_name=task_name,
+                        custom_analysis_prompt=custom_analysis_prompt.strip() if custom_analysis_prompt.strip() else None,
                     )
                     
                     # Save the metadata and generate a report
                     save_metadata(metadata, result_dir, uploaded_file.name)
-                    save_final_report(metadata, result_dir, uploaded_file.name, task_name)
+                    save_final_report(metadata, result_dir, uploaded_file.name, task_name, custom_report_prompt.strip() if custom_report_prompt.strip() else None)
                     
                     # Clean up temporary file
                     os.unlink(video_path)

@@ -4,7 +4,7 @@ import json
 import datetime
 import concurrent.futures
 import collections
-from .azure_services import upload_to_blob, create_caption_by_gpt_multi, create_caption_by_gpt_with_history
+from .azure_services import upload_to_blob, create_caption_by_gpt_with_history
 
 def extract_and_save_frames(video_path, output_dir, interval=2):
     """
@@ -62,92 +62,7 @@ def chunkify(lst, chunk_size=5):
     for i in range(0, len(lst), chunk_size):
         yield lst[i:i+chunk_size]
 
-def process_frame_chunk(chunk, video_filename):
-    """
-    Process a chunk of frames (upload to blob and generate caption).
-    
-    Args:
-        chunk: List of frame tuples
-        video_filename: Name of the video file
-        
-    Returns:
-        dict: Metadata for the chunk including caption
-    """
-    # Upload frames to blob and collect information
-    image_infos = []
-    for (frame_filepath, frame_number, timestamp) in chunk:
-        frame_filename = os.path.basename(frame_filepath)
-        blob_url, sas_token = upload_to_blob(frame_filepath, f"images/{frame_filename}")
-        image_infos.append({
-            "url": f"{blob_url}?{sas_token}",
-            "frame_number": frame_number,
-            "timestamp": timestamp
-        })
-    
-    # Generate caption for the chunk
-    caption = create_caption_by_gpt_multi(image_infos)
-
-    # Compile metadata
-    chunk_metadata = {
-        "video_filename": video_filename,
-        "frames": [
-            {
-                "frame_number": info["frame_number"],
-                "timestamp": info["timestamp"],
-                "frame_url_with_sas": info["url"]
-            }
-            for info in image_infos
-        ],
-        "chunk_caption": caption
-    }
-    return chunk_metadata
-
-def process_video_in_chunks(video_path, output_dir, interval=5, parallel_degree=4, chunk_size=5):
-    """
-    Process a video by extracting frames, splitting into chunks,
-    and processing each chunk in parallel.
-    
-    Args:
-        video_path: Path to input video
-        output_dir: Directory to save outputs
-        interval: Seconds between frames
-        parallel_degree: Number of parallel threads
-        chunk_size: Number of frames per chunk
-        
-    Returns:
-        str: Path to metadata JSON file
-    """
-    video_filename = os.path.basename(video_path)
-    frames = extract_and_save_frames(video_path, output_dir, interval=interval)
-
-    # Split frames into chunks
-    frame_chunks = list(chunkify(frames, chunk_size=chunk_size))
-
-    chunk_results = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=parallel_degree) as executor:
-        future_to_chunk = {
-            executor.submit(process_frame_chunk, chunk, video_filename): chunk
-            for chunk in frame_chunks
-        }
-        for future in concurrent.futures.as_completed(future_to_chunk):
-            chunk = future_to_chunk[future]
-            try:
-                data = future.result()
-                chunk_results.append(data)
-            except Exception as exc:
-                print(f"chunk {chunk} generated an exception: {exc}")
-
-    # Save metadata to JSON
-    metadata_json_path = os.path.join(output_dir, f"{video_filename}_metadata.json")
-    with open(metadata_json_path, 'w', encoding='utf-8') as f:
-        json.dump(chunk_results, f, ensure_ascii=False, indent=4)
-
-    # Upload metadata to blob
-    upload_to_blob(metadata_json_path, f"metadata/{video_filename}_metadata.json")
-
-    return metadata_json_path
-
-def process_video_with_history(video_path, output_dir, interval=5, chunk_size=5, task_name="battery exchange"):
+def process_video_with_history(video_path, output_dir, interval=5, chunk_size=5, task_name="battery exchange", custom_analysis_prompt=None):
     """
     Process video sequentially with history context.
     
@@ -157,6 +72,7 @@ def process_video_with_history(video_path, output_dir, interval=5, chunk_size=5,
         interval: Seconds between frames
         chunk_size: Number of frames per chunk
         task_name: Name of the task in the video
+        custom_analysis_prompt: Optional custom system prompt for frame analysis
         
     Returns:
         list: All metadata for the video processing
@@ -180,8 +96,8 @@ def process_video_with_history(video_path, output_dir, interval=5, chunk_size=5,
                 "timestamp": timestamp
             })
 
-        # Generate caption with history
-        caption = create_caption_by_gpt_with_history(image_infos, list(history), task_name)
+        # Generate caption with history and custom prompt
+        caption = create_caption_by_gpt_with_history(image_infos, list(history), task_name, custom_analysis_prompt)
 
         # Compile metadata
         chunk_meta = {
