@@ -4,7 +4,7 @@ import json
 import datetime
 import concurrent.futures
 import collections
-from .azure_services import upload_to_blob, create_caption_by_gpt_with_history
+from .azure_services import upload_to_blob, create_caption_by_gpt_with_history, convert_image_to_base64
 
 def extract_and_save_frames(video_path, output_dir, interval=2):
     """
@@ -86,17 +86,23 @@ def process_video_with_history(video_path, output_dir, interval=5, chunk_size=5,
     all_metadata = []
 
     for chunk in frame_chunks:
-        # Upload frames to blob and collect information
+        # Upload frames to blob and convert to base64 for OpenAI
         image_infos = []
         for frame_filepath, frame_number, timestamp in chunk:
+            # Upload to blob for storage
             blob_url, sas_token = upload_to_blob(frame_filepath, f"images/{os.path.basename(frame_filepath)}")
+            # Convert to base64 for OpenAI processing
+            base64_data = convert_image_to_base64(frame_filepath)
+            
             image_infos.append({
-                "url": f"{blob_url}?{sas_token}",
+                "base64_data": base64_data,  # For OpenAI processing
+                "blob_url": blob_url,        # For storage reference
+                "sas_token": sas_token,      # For storage access
                 "frame_number": frame_number,
                 "timestamp": timestamp
             })
 
-        # Generate caption with history and custom prompt
+        # Generate caption with history and custom prompt (uses base64_data)
         caption = create_caption_by_gpt_with_history(image_infos, list(history), task_name, custom_analysis_prompt)
 
         # Compile metadata
@@ -106,9 +112,11 @@ def process_video_with_history(video_path, output_dir, interval=5, chunk_size=5,
                 {
                     "frame_number": info["frame_number"],
                     "timestamp": info["timestamp"],
-                    "frame_url_with_sas": info["url"]
+                    "frame_path": frames[i][0],  # Local file path
+                    "blob_url": info["blob_url"],  # Blob storage URL
+                    "blob_url_with_sas": f"{info['blob_url']}?{info['sas_token']}"  # URL with SAS for access
                 }
-                for info in image_infos
+                for i, info in enumerate(image_infos)
             ],
             "chunk_caption": caption
         }

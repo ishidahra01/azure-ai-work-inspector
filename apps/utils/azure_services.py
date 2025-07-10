@@ -1,5 +1,6 @@
 import os
 import datetime
+import base64
 from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions
 from openai import AzureOpenAI
 from dotenv import load_dotenv
@@ -63,6 +64,20 @@ def get_openai_client():
     )
     return client
 
+def convert_image_to_base64(image_path):
+    """
+    Convert an image file to Base64 string.
+    
+    Args:
+        image_path: Path to the image file
+        
+    Returns:
+        str: Base64 encoded image data with data URI prefix
+    """
+    with open(image_path, "rb") as image_file:
+        encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+        return f"data:image/jpeg;base64,{encoded_string}"
+
 def create_caption_by_gpt_with_history(image_infos, history_captions, task_name="battery exchange", custom_system_prompt=None):
     """
     Generate captions for frames with context from history.
@@ -107,7 +122,7 @@ def create_caption_by_gpt_with_history(image_infos, history_captions, task_name=
         })
         user_content.append({
             "type": "image_url",
-            "image_url": {"url": info['url']}
+            "image_url": {"url": info['base64_data']}
         })
 
     messages = [
