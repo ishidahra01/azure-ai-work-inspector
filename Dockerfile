@@ -16,8 +16,11 @@ COPY . /app
 # Python 依存をインストール
 RUN pip install --no-cache-dir -r requirements.txt
 
+# appsディレクトリに移動
+WORKDIR /app/apps
+
 # コンテナ外部に開放するポート
 EXPOSE 8000
 
 # Streamlit 起動コマンドに合わせて CMD を指定
-CMD ["python", "-m", "streamlit", "run", "apps/app.py", "--server.port", "8000", "--server.address", "0.0.0.0"]
+CMD ["python", "-m", "streamlit", "run", "app.py", "--server.port", "8000", "--server.address", "0.0.0.0"]
