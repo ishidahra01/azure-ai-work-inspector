@@ -21,27 +21,36 @@ def extract_and_save_frames(video_path, output_dir, interval=2):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    # Load video file
     cap = cv2.VideoCapture(video_path)
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0  # fallback if metadata is missing/zero
     video_filename = os.path.basename(video_path)
 
-    saved_frames = []  # [(frame_path, frame_number, timestamp), ...]
-
+    saved_frames = []
     frame_number = 0
+    last_slot = -1  # ensure only one frame per interval slot
+
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-        current_time = frame_number / fps
 
-        # Save frame at each interval
-        if current_time % interval < 1.0 / fps:
+        # Prefer accurate stream timestamp when available
+        pos_msec = cap.get(cv2.CAP_PROP_POS_MSEC)
+        if pos_msec and pos_msec > 0:
+            current_time = pos_msec / 1000.0
+        else:
+            current_time = frame_number / fps
+
+        # Compute the current interval slot
+        slot = int(current_time // interval)
+
+        # Save only the first frame in each slot
+        if slot != last_slot:
             frame_filename = f"{video_filename}_frame_{frame_number}.jpg"
             frame_filepath = os.path.join(output_dir, frame_filename)
             cv2.imwrite(frame_filepath, frame)
             saved_frames.append((frame_filepath, frame_number, current_time))
+            last_slot = slot
 
         frame_number += 1
 
