@@ -191,9 +191,23 @@ When triggered, it will:
    ```properties
    AZURE_OPENAI_API_KEY=<your-key>
    AZURE_OPENAI_ENDPOINT=https://<your-openai-resource>.openai.azure.com/
+   AZURE_OPENAI_ANALYSIS_MODEL=gpt-4.1
+   AZURE_OPENAI_REPORT_MODEL=o4-mini
+   DEFAULT_LLM_PROVIDER=azure_openai
+   FOUNDRY_CLAUDE_BASE_URL=https://<your-foundry-resource>.services.ai.azure.com/anthropic
+   FOUNDRY_CLAUDE_API_KEY=<optional-if-using-api-key>
+   FOUNDRY_CLAUDE_ANALYSIS_MODEL=claude-sonnet-4-6
+   FOUNDRY_CLAUDE_REPORT_MODEL=claude-sonnet-4-6
    BLOB_CONNECTION_STRING=<your-storage-conn-string>
    BLOB_CONTAINER_NAME=<your-blob-container-name>
    ```
+
+   `AZURE_OPENAI_API_KEY` is optional when you want to use Microsoft Entra ID.
+   If the key is empty, the app uses `DefaultAzureCredential` for Azure OpenAI.
+   In that case, the executing identity needs an Azure OpenAI role such as `Cognitive Services OpenAI User`.
+
+   `FOUNDRY_CLAUDE_API_KEY` is also optional.
+   If the key is empty, the app uses `DefaultAzureCredential` for Claude in Foundry.
 2. Create and activate a Python virtual environment (Python 3.12+ recommended):
 
    ```bash
@@ -210,6 +224,29 @@ When triggered, it will:
    ```bash
    streamlit run apps/app.py
    ```
+
+### Provider Selection
+
+The app now supports two LLM providers for video analysis:
+
+1. `Azure OpenAI`: existing behavior using Azure OpenAI deployments
+2. `Claude (Foundry)`: Anthropic Claude deployments hosted in Microsoft Foundry
+
+Choose the provider and deployment names from the Streamlit sidebar before starting a run.
+
+For Claude in Foundry:
+
+1. Deploy a Claude model in Foundry.
+2. Set `FOUNDRY_CLAUDE_BASE_URL` to `https://<resource-name>.services.ai.azure.com/anthropic`.
+3. Use either `FOUNDRY_CLAUDE_API_KEY` or Microsoft Entra ID credentials.
+
+For Azure OpenAI:
+
+1. Set `AZURE_OPENAI_ENDPOINT` to your Azure OpenAI resource endpoint.
+2. Use either `AZURE_OPENAI_API_KEY` or Microsoft Entra ID credentials.
+3. If you use Entra ID, make sure the runtime identity has an Azure OpenAI data-plane role.
+
+The current implementation keeps the existing pipeline unchanged and swaps only the frame-analysis and report-generation provider.
 
 ---
 

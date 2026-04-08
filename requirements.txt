@@ -6,6 +6,7 @@ langchainhub==0.1.20
 openai==1.88.0
 tiktoken==0.7.0
 azure-identity==1.17.1
+anthropic>=0.52.0,<1.0.0
 azure-search-documents==11.6.0b3
 streamlit==1.45.1
 opencv-python==4.11.0.86

@@ -1,17 +1,22 @@
 import os
+import logging
 import streamlit as st
 import tempfile
 import pandas as pd
 import time
 import base64
+import traceback
 from pathlib import Path
 from datetime import datetime
 from utils.video_processor import process_video_with_history
+from utils.llm_provider import DEFAULT_PROVIDER_NAME, get_default_model_selection, get_provider_options
 from utils.result_manager import (create_result_directory, get_all_result_dirs, 
                                 save_metadata, save_final_report, get_result_info,
-                                load_metadata, load_report)
+                                load_metadata, load_report, save_error_log, load_error_log)
 from utils.file_upload import ChunkedFileUploader, StreamedFileHandler, format_file_size
 import config
+
+logger = logging.getLogger(__name__)
 
 # Set page configuration
 st.set_page_config(
@@ -60,6 +65,39 @@ st.markdown("<h1 class='page-title'>AI Work Inspector</h1>", unsafe_allow_html=T
 # Sidebar for configuration and result selection
 with st.sidebar:
     st.header("Configuration")
+
+    provider_options = get_provider_options()
+    provider_names = list(provider_options.keys())
+    default_provider_index = provider_names.index(DEFAULT_PROVIDER_NAME) if DEFAULT_PROVIDER_NAME in provider_names else 0
+
+    st.subheader("LLM Provider")
+    with st.container(border=True):
+        llm_provider_name = st.selectbox(
+            "Provider",
+            options=provider_names,
+            index=default_provider_index,
+            format_func=lambda provider_key: provider_options[provider_key],
+            help="Choose which provider handles frame analysis and report generation.",
+        )
+
+        default_models = get_default_model_selection(llm_provider_name)
+        analysis_model = st.text_input(
+            "Frame Analysis Deployment",
+            value=default_models["analysis_model"],
+            key=f"analysis_model_{llm_provider_name}",
+            help="Deployment name used for frame-level analysis.",
+        ).strip()
+        report_model = st.text_input(
+            "Report Generation Deployment",
+            value=default_models["report_model"],
+            key=f"report_model_{llm_provider_name}",
+            help="Deployment name used for final report generation.",
+        ).strip()
+
+        if llm_provider_name == "foundry_claude":
+            st.caption("Claude uses the Foundry Anthropic endpoint. Set FOUNDRY_CLAUDE_BASE_URL and either FOUNDRY_CLAUDE_API_KEY or Entra ID credentials.")
+        else:
+            st.caption("Azure OpenAI uses AZURE_OPENAI_ENDPOINT and the selected deployment names. Authenticate with either AZURE_OPENAI_API_KEY or Entra ID credentials.")
     
     # Parameters input
     st.subheader("Analysis Parameters")
@@ -114,10 +152,14 @@ with st.sidebar:
         
         if uploaded_file is not None and not st.session_state.processing:
             if st.button("Process Video", type="primary"):
+                result_dir = None
                 try:
+                    if not analysis_model or not report_model:
+                        st.error("Frame analysis and report deployment names are required.")
+                        st.stop()
+
                     # Create a new result directory
                     result_dir = create_result_directory(st.session_state.results_base_path)
-                    st.session_state.current_result_dir = result_dir
                     st.session_state.processing = True
                     
                     # Display processing message
@@ -156,18 +198,30 @@ with st.sidebar:
                             chunk_size=chunk_size,
                             task_name=task_name,
                             custom_analysis_prompt=custom_analysis_prompt.strip() if custom_analysis_prompt.strip() else None,
+                            provider_name=llm_provider_name,
+                            analysis_model=analysis_model,
                         )
                         
                         st.write("📊 Generating analysis report...")
                         # Save the metadata and generate a report
                         save_metadata(metadata, result_dir, uploaded_file.name)
-                        save_final_report(metadata, result_dir, uploaded_file.name, task_name, custom_report_prompt.strip() if custom_report_prompt.strip() else None)
+                        save_final_report(
+                            metadata,
+                            result_dir,
+                            uploaded_file.name,
+                            task_name,
+                            custom_report_prompt.strip() if custom_report_prompt.strip() else None,
+                            provider_name=llm_provider_name,
+                            analysis_model=analysis_model,
+                            report_model=report_model,
+                        )
                         
                         # Clean up temporary file
                         if os.path.exists(video_path):
                             os.unlink(video_path)
                         st.session_state.uploaded_video_path = None
                         
+                        st.session_state.current_result_dir = result_dir
                         st.session_state.processing = False
                         st.success("✅ Processing complete!")
                         
@@ -175,12 +229,26 @@ with st.sidebar:
                         st.rerun()
                         
                 except Exception as e:
+                    error_details = traceback.format_exc()
+                    logger.exception(
+                        "Video processing failed. provider=%s analysis_model=%s report_model=%s result_dir=%s video=%s",
+                        llm_provider_name,
+                        analysis_model,
+                        report_model,
+                        result_dir,
+                        getattr(uploaded_file, "name", None),
+                    )
+                    if result_dir and os.path.exists(result_dir):
+                        save_error_log(result_dir, error_details)
                     st.error(f"An error occurred during processing: {str(e)}")
+                    with st.expander("Show error details"):
+                        st.code(error_details)
                     # Clean up temporary file on error
                     if 'uploaded_video_path' in st.session_state and st.session_state.uploaded_video_path:
                         if os.path.exists(st.session_state.uploaded_video_path):
                             os.unlink(st.session_state.uploaded_video_path)
                         st.session_state.uploaded_video_path = None
+                    st.session_state.current_result_dir = None
                     st.session_state.processing = False
     
     # Result selection
@@ -223,16 +291,33 @@ elif st.session_state.current_result_dir:
     # Display selected result
     result_info = get_result_info(st.session_state.current_result_dir)
     
-    st.header(f"Analysis Results: {result_info['video_name']}")
+    result_title = result_info["video_name"] or f"Run {result_info['timestamp']}"
+
+    st.header(f"Analysis Results: {result_title}")
     st.subheader(f"Processed on: {result_info['timestamp'].replace('_', ' ')}")
+
+    if not result_info["is_complete"]:
+        st.warning("This result is incomplete. Processing may have failed before metadata or report generation finished.")
+
+    if result_info["has_error_log"]:
+        error_log_content = load_error_log(
+            st.session_state.current_result_dir,
+            result_info["error_log_file"],
+        )
+        if error_log_content:
+            with st.expander("Processing error log"):
+                st.code(error_log_content)
     
     # Container for video and report
     col1, col2 = st.columns([1, 1])
     
     with col1:
         st.subheader("Video Preview")
-        video_path = os.path.join(st.session_state.current_result_dir, result_info["video_name"])
-        if os.path.exists(video_path):
+        video_path = None
+        if result_info["video_file"]:
+            video_path = os.path.join(st.session_state.current_result_dir, result_info["video_file"])
+
+        if video_path and os.path.exists(video_path):
             display_video(video_path)
         else:
             st.warning("Video file not found.")

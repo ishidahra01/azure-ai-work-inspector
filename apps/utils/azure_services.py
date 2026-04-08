@@ -2,23 +2,20 @@ import os
 import datetime
 import base64
 from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions
-from openai import AzureOpenAI
 from dotenv import load_dotenv
+from .llm_provider import get_video_analysis_provider
 
 # Load environment variables
-load_dotenv(override=True)
+load_dotenv(override=False)
 
 # Azure Storage Blob configuration
 BLOB_CONNECTION_STRING = os.getenv("BLOB_CONNECTION_STRING")
 BLOB_CONTAINER_NAME = os.getenv("BLOB_CONTAINER_NAME")
 
-# Azure OpenAI configuration
-AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
-AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
-AOAI_API_VERSION = '2024-12-01-preview'
-
 def get_blob_service_client():
     """Returns a BlobServiceClient instance."""
+    if not BLOB_CONNECTION_STRING:
+        raise ValueError("Missing required environment variable: BLOB_CONNECTION_STRING")
     return BlobServiceClient.from_connection_string(BLOB_CONNECTION_STRING)
 
 def upload_to_blob(file_path, blob_name):
@@ -32,6 +29,9 @@ def upload_to_blob(file_path, blob_name):
     Returns:
         tuple: (blob_url, sas_token)
     """
+    if not BLOB_CONTAINER_NAME:
+        raise ValueError("Missing required environment variable: BLOB_CONTAINER_NAME")
+
     blob_service_client = get_blob_service_client()
     blob_client = blob_service_client.get_blob_client(container=BLOB_CONTAINER_NAME, blob=blob_name)
     
@@ -55,15 +55,6 @@ def upload_to_blob(file_path, blob_name):
     blob_url = blob_client.url
     return blob_url, sas_token
 
-def get_openai_client():
-    """Returns an AzureOpenAI client instance for GPT-4o model."""
-    client = AzureOpenAI(
-        azure_endpoint=AZURE_OPENAI_ENDPOINT,
-        api_key=AZURE_OPENAI_API_KEY,
-        api_version=AOAI_API_VERSION
-    )
-    return client
-
 def convert_image_to_base64(image_path):
     """
     Convert an image file to Base64 string.
@@ -78,7 +69,15 @@ def convert_image_to_base64(image_path):
         encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
         return f"data:image/jpeg;base64,{encoded_string}"
 
-def create_caption_by_gpt_with_history(image_infos, history_captions, task_name="battery exchange", custom_system_prompt=None):
+def create_caption_with_history(
+    image_infos,
+    history_captions,
+    task_name="battery exchange",
+    custom_system_prompt=None,
+    provider_name=None,
+    analysis_model=None,
+    report_model=None,
+):
     """
     Generate captions for frames with context from history.
     
@@ -87,62 +86,54 @@ def create_caption_by_gpt_with_history(image_infos, history_captions, task_name=
         history_captions: List of previous caption texts
         task_name: Name of the task being analyzed
         custom_system_prompt: Optional custom system prompt to override default
+        provider_name: LLM provider identifier
+        analysis_model: Optional deployment name for frame analysis
+        report_model: Optional deployment name for report generation
         
     Returns:
         str: Generated caption
     """
-    client = get_openai_client()
-    
-    if custom_system_prompt:
-        system_message = f"{custom_system_prompt}\n\nHere is the history of captions for the previous frames:\n{history_captions}"
-    else:
-        system_message = f"""
-        You are an expert in analyzing vehicle inspection procedures from video footage, especially {task_name} tasks. 
-        Given a set of frames extracted from a continuous video, along with descriptions of prior tasks already completed, your tasks are as follows:
-
-        - Describe the sequence of actions observed in the frames, including the time taken for each action and any notable changes in the inspection process.
-        - Identify inefficient movements or suboptimal work methods observed during the inspection process and propose concrete improvements.
-        - Discover implicit knowledge and expert techniques demonstrated by experienced workers that may not be documented but contribute to efficient task execution.
-
-        You should focus on the following aspects:
-        - Analyze the sequence as a time-continuous process, not as isolated frames.
-        - Consider temporal consistency and motion cues to understand how the inspection unfolds.
-        - Take into account the context of previously completed tasks to infer the purpose and position of the current action within the overall workflow.
-        - Provide a concise explanation in English (max 400 characters per task), explaining your reasoning based on observed changes across frames and the prior task context.
-        
-        Here is the history of captions for the previous frames:
-        {history_captions}
-        """
-
-    user_content = []
-    for idx, info in enumerate(image_infos):
-        user_content.append({
-            "type": "text",
-            "content": f"Frame {idx+1}: time={info['timestamp']:.2f} sec, frame_number={info['frame_number']}."
-        })
-        user_content.append({
-            "type": "image_url",
-            "image_url": {"url": info['base64_data']}
-        })
-
-    messages = [
-        {"role": "system", "content": system_message},
-        {"role": "user", "content": user_content},
-    ]
-
-    completion = client.chat.completions.create(
-        model="gpt-4.1",
-        messages=messages,
-        temperature=0,
-        max_tokens=1000,
-        top_p=0.95,
-        frequency_penalty=0,
-        presence_penalty=0
+    provider = get_video_analysis_provider(
+        provider_name=provider_name,
+        analysis_model=analysis_model,
+        report_model=report_model,
+    )
+    return provider.create_caption(
+        image_infos=image_infos,
+        history_captions=history_captions,
+        task_name=task_name,
+        custom_system_prompt=custom_system_prompt,
     )
 
-    return completion.choices[0].message.content
 
-def generate_final_report(filtered_data, task_name="battery exchange", custom_system_prompt=None):
+def create_caption_by_gpt_with_history(
+    image_infos,
+    history_captions,
+    task_name="battery exchange",
+    custom_system_prompt=None,
+    provider_name=None,
+    analysis_model=None,
+    report_model=None,
+):
+    return create_caption_with_history(
+        image_infos=image_infos,
+        history_captions=history_captions,
+        task_name=task_name,
+        custom_system_prompt=custom_system_prompt,
+        provider_name=provider_name,
+        analysis_model=analysis_model,
+        report_model=report_model,
+    )
+
+
+def generate_final_report(
+    filtered_data,
+    task_name="battery exchange",
+    custom_system_prompt=None,
+    provider_name=None,
+    analysis_model=None,
+    report_model=None,
+):
     """
     Generate a final report from all chunk data.
     
@@ -150,35 +141,20 @@ def generate_final_report(filtered_data, task_name="battery exchange", custom_sy
         filtered_data: List of processed chunk data
         task_name: Name of the task being analyzed
         custom_system_prompt: Optional custom system prompt to override default
+        provider_name: LLM provider identifier
+        analysis_model: Optional deployment name for frame analysis
+        report_model: Optional deployment name for report generation
         
     Returns:
         str: Generated report in Markdown format
     """
-    client = get_openai_client()
-    
-    if custom_system_prompt:
-        developer_message = custom_system_prompt
-    else:
-        developer_message = f"""
-        You are an expert in generating structured reports based on video analysis of vehicle inspection work, especially {task_name}.
-        Analyze the video and create a detailed report with the following instructions:
-
-        - Structure the findings into clear, organized sections ("Task description"," "Inefficient Movements", "Improvement Suggestions", "Implicit Expert Knowledge").
-        - Do not omit any tasks and any insights you observe from the video. Even minor observations should be included if they provide meaningful insight.
-        - Use bullet points, subheadings, and concise descriptions to make the report easy to read and actionable.
-        - The output must be in Markdown format and in Japanese.
-        - For each reported item, include one or more corresponding time frames (e.g., 00:01:23–00:01:35) from the video as supporting evidence, to ensure traceability and allow reviewers to reference the specific moments where the observations were made.
-
-        Note: The original frame analysis results are based only on a limited time segment, so there may be inaccuracies due to missing context from preceding and following frames. Please review the full sequence of results, and revise any inconsistencies using information from the surrounding context.
-        """
-
-    response = client.chat.completions.create(
-        model="o4-mini",  # Use appropriate model deployment name
-        messages=[
-            {"role": "developer", "content": developer_message},
-            {"role": "user", "content": str(filtered_data)},
-        ],
-        max_completion_tokens=10000,  # Adjust as needed
+    provider = get_video_analysis_provider(
+        provider_name=provider_name,
+        analysis_model=analysis_model,
+        report_model=report_model,
     )
-
-    return response.choices[0].message.content
+    return provider.generate_report(
+        filtered_data=filtered_data,
+        task_name=task_name,
+        custom_system_prompt=custom_system_prompt,
+    )

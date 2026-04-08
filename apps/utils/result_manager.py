@@ -4,6 +4,8 @@ import copy
 import datetime
 from .azure_services import generate_final_report
 
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".mpeg", ".mpg"}
+
 def create_result_directory(base_path="results"):
     """
     Create a unique result directory with timestamp.
@@ -64,7 +66,16 @@ def save_metadata(metadata, result_dir, video_filename):
         json.dump(metadata, f, ensure_ascii=False, indent=4)
     return metadata_path
 
-def save_final_report(metadata, result_dir, video_filename, task_name="battery exchange", custom_report_prompt=None):
+def save_final_report(
+    metadata,
+    result_dir,
+    video_filename,
+    task_name="battery exchange",
+    custom_report_prompt=None,
+    provider_name=None,
+    analysis_model=None,
+    report_model=None,
+):
     """
     Generate and save a final analysis report.
     
@@ -74,6 +85,9 @@ def save_final_report(metadata, result_dir, video_filename, task_name="battery e
         video_filename: Name of the processed video
         task_name: Name of the task in the video
         custom_report_prompt: Optional custom system prompt for report generation
+        provider_name: LLM provider identifier
+        analysis_model: Optional deployment name for frame analysis
+        report_model: Optional deployment name for report generation
         
     Returns:
         str: Path to the saved report file
@@ -87,7 +101,14 @@ def save_final_report(metadata, result_dir, video_filename, task_name="battery e
             frame.pop('frame_url_with_sas', None)
     
     # Generate the report
-    report_content = generate_final_report(filtered_data, task_name, custom_report_prompt)
+    report_content = generate_final_report(
+        filtered_data,
+        task_name,
+        custom_report_prompt,
+        provider_name=provider_name,
+        analysis_model=analysis_model,
+        report_model=report_model,
+    )
     
     # Save the report
     report_path = os.path.join(result_dir, f"{video_filename}_report.md")
@@ -112,20 +133,32 @@ def get_result_info(result_dir):
     # Find metadata and report files
     metadata_files = [f for f in os.listdir(result_dir) if f.endswith("_metadata.json")]
     report_files = [f for f in os.listdir(result_dir) if f.endswith("_report.md")]
+    error_log_files = [f for f in os.listdir(result_dir) if f.endswith("_error.log")]
+    video_files = [
+        f for f in os.listdir(result_dir)
+        if os.path.isfile(os.path.join(result_dir, f)) and os.path.splitext(f)[1].lower() in VIDEO_EXTENSIONS
+    ]
     
     # Extract video name from first metadata file if available
     video_name = None
     if metadata_files:
         video_name = metadata_files[0].replace("_metadata.json", "")
+    elif video_files:
+        video_name = video_files[0]
     
     return {
         "dir": result_dir,
         "timestamp": dir_name,
         "video_name": video_name,
+        "has_video": len(video_files) > 0,
         "has_metadata": len(metadata_files) > 0,
         "has_report": len(report_files) > 0,
+        "has_error_log": len(error_log_files) > 0,
+        "is_complete": len(video_files) > 0 and len(metadata_files) > 0 and len(report_files) > 0,
+        "video_file": video_files[0] if video_files else None,
         "metadata_file": metadata_files[0] if metadata_files else None,
-        "report_file": report_files[0] if report_files else None
+        "report_file": report_files[0] if report_files else None,
+        "error_log_file": error_log_files[0] if error_log_files else None,
     }
 
 def load_metadata(result_dir, metadata_filename):
@@ -162,4 +195,41 @@ def load_report(result_dir, report_filename):
         return None
         
     with open(report_path, 'r', encoding='utf-8') as f:
+        return f.read()
+
+
+def save_error_log(result_dir, error_details, log_name="processing_error.log"):
+    """
+    Save processing error details to the result directory.
+
+    Args:
+        result_dir: Path to the result directory
+        error_details: Error details to persist
+        log_name: Name of the log file
+
+    Returns:
+        str: Path to the saved error log
+    """
+    error_log_path = os.path.join(result_dir, log_name)
+    with open(error_log_path, 'w', encoding='utf-8') as f:
+        f.write(error_details)
+    return error_log_path
+
+
+def load_error_log(result_dir, error_log_filename):
+    """
+    Load an error log from a result directory.
+
+    Args:
+        result_dir: Path to the result directory
+        error_log_filename: Name of the error log file
+
+    Returns:
+        str: Error log content
+    """
+    error_log_path = os.path.join(result_dir, error_log_filename)
+    if not os.path.exists(error_log_path):
+        return None
+
+    with open(error_log_path, 'r', encoding='utf-8') as f:
         return f.read()

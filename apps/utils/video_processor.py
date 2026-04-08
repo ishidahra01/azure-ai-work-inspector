@@ -4,7 +4,7 @@ import json
 import datetime
 import concurrent.futures
 import collections
-from .azure_services import upload_to_blob, create_caption_by_gpt_with_history, convert_image_to_base64
+from .azure_services import upload_to_blob, create_caption_with_history, convert_image_to_base64
 
 def extract_and_save_frames(video_path, output_dir, interval=2):
     """
@@ -71,7 +71,16 @@ def chunkify(lst, chunk_size=5):
     for i in range(0, len(lst), chunk_size):
         yield lst[i:i+chunk_size]
 
-def process_video_with_history(video_path, output_dir, interval=5, chunk_size=5, task_name="battery exchange", custom_analysis_prompt=None):
+def process_video_with_history(
+    video_path,
+    output_dir,
+    interval=5,
+    chunk_size=5,
+    task_name="battery exchange",
+    custom_analysis_prompt=None,
+    provider_name=None,
+    analysis_model=None,
+):
     """
     Process video sequentially with history context.
     
@@ -82,6 +91,8 @@ def process_video_with_history(video_path, output_dir, interval=5, chunk_size=5,
         chunk_size: Number of frames per chunk
         task_name: Name of the task in the video
         custom_analysis_prompt: Optional custom system prompt for frame analysis
+        provider_name: LLM provider identifier
+        analysis_model: Optional deployment name for frame analysis
         
     Returns:
         list: All metadata for the video processing
@@ -112,7 +123,14 @@ def process_video_with_history(video_path, output_dir, interval=5, chunk_size=5,
             })
 
         # Generate caption with history and custom prompt (uses base64_data)
-        caption = create_caption_by_gpt_with_history(image_infos, list(history), task_name, custom_analysis_prompt)
+        caption = create_caption_with_history(
+            image_infos=image_infos,
+            history_captions=list(history),
+            task_name=task_name,
+            custom_system_prompt=custom_analysis_prompt,
+            provider_name=provider_name,
+            analysis_model=analysis_model,
+        )
 
         # Compile metadata
         chunk_meta = {
