@@ -248,6 +248,57 @@ For Azure OpenAI:
 
 The current implementation keeps the existing pipeline unchanged and swaps only the frame-analysis and report-generation provider.
 
+## Agent Workspace
+
+This repository now includes a second Streamlit page for secondary analysis of generated artifacts.
+
+- Left pane: chat with an artifact-focused agent for follow-up analysis
+- Right pane: editable draft document with preview, history, and raw response log
+- Result selection: choose one or more past runs and let the agent read their report, metadata, error log, and frames folder
+- Transport: the Streamlit page posts to a local HTTP agent hosted through Microsoft Agent Framework
+
+### Files
+
+- `apps/pages/1_Agent_Workspace.py`: Streamlit chat + editor UI with past-result selection
+- `apps/utils/agent_workspace.py`: request building, response parsing, and selected-artifact context generation
+- `agent_workspace/main.py`: local hosted agent entrypoint using `from_agent_framework(...)`
+- `agent_workspace/CLAUDE.md`: artifact-analysis operating guidance for the hosted agent
+
+### Local setup
+
+1. Install the added preview packages from `requirements.txt`.
+2. Populate the new Foundry-related variables in `.env`.
+3. Start the hosted agent locally:
+
+   ```bash
+   c:/Users/hishida/repo/azure-ai-work-inspector/.venv/Scripts/python.exe agent_workspace/main.py
+   ```
+
+   If you want to use the included VS Code debug tasks and Agent Inspector integration, also install:
+
+   ```bash
+   pip install agent-dev-cli --pre
+   ```
+
+4. In another terminal, start Streamlit as before:
+
+   ```bash
+   streamlit run apps/app.py
+   ```
+
+5. Open the `Agent Workspace` page from the Streamlit sidebar.
+6. Select one or more previous result directories and ask follow-up questions such as comparison, timestamp investigation, chunk re-summary, or partial report regeneration.
+
+### Version note
+
+As of April 2026, newer `agent-framework-*` packages exist on PyPI, but the hosted adapter stack is still safest on the pinned compatibility set below for this repo:
+
+- `claude-agent-sdk==0.1.56`
+- `agent-framework-core==1.0.0rc3`
+- `agent-framework-claude==1.0.0b260225`
+- `agent-framework-azure-ai==1.0.0rc3`
+- `azure-ai-agentserver-agentframework==1.0.0b17`
+
 ---
 
 By following these steps and using the provided CLI snippets and portal links, you can provision all required Azure resources, deploy the containerized application, and run `azure-ai-work-inspector` both locally and in production.
