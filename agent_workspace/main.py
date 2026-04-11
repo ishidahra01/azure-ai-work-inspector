@@ -21,7 +21,7 @@ if not hasattr(agent_framework_module, "HistoryProvider") and hasattr(agent_fram
 from azure.ai.agentserver.agentframework import from_agent_framework
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent
 LOGGER = logging.getLogger("analysis_artifact_agent")
 DEFAULT_PORT = 8088
 FOUNDRY_MODEL_PIN_KEYS = [
@@ -34,6 +34,7 @@ BUILTIN_TOOLS = [
     "Read",
     "Glob",
     "Grep",
+    "Skill",
 ]
 
 
@@ -163,6 +164,7 @@ def _build_agent() -> ClaudeAgent:
             "Respond in Japanese unless the user explicitly requests another language. "
             "Your role is secondary interpretation of already generated analysis artifacts for AI Work Inspector. "
             "Prefer reading selected result files, metadata, reports, and frame paths over making assumptions. "
+            "When a task matches an available project skill under .claude/skills, use that skill instead of improvising the workflow. "
             "Stay inside narrow business operations such as result comparison, timestamp/frame lookup, chunk caption re-summary, "
             "work standard search under data/work_item_descripton, selective report section regeneration, and provider comparison planning. "
             "Do not edit repository files and do not use shell commands. "

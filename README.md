@@ -263,6 +263,7 @@ This repository now includes a second Streamlit page for secondary analysis of g
 - `apps/utils/agent_workspace.py`: request building, response parsing, and selected-artifact context generation
 - `agent_workspace/main.py`: local hosted agent entrypoint using `from_agent_framework(...)`
 - `agent_workspace/CLAUDE.md`: artifact-analysis operating guidance for the hosted agent
+- `agent_workspace/.claude/skills/`: project Skills for evidence audit, multi-run pattern mining, SOP coverage review, prompt optimization, and coaching artifact generation
 
 ### Local setup
 
@@ -288,6 +289,16 @@ This repository now includes a second Streamlit page for secondary analysis of g
 
 5. Open the `Agent Workspace` page from the Streamlit sidebar.
 6. Select one or more previous result directories and ask follow-up questions such as comparison, timestamp investigation, chunk re-summary, or partial report regeneration.
+
+### Included Claude Skills
+
+The hosted agent enables the `Skill` tool and loads project Skills from `agent_workspace/.claude/skills/` because the agent process runs with `agent_workspace/` as its working directory.
+
+- `evidence-audit-confidence-map`: separate observation from inference and trace report claims back to chunk/frame evidence
+- `pattern-miner-across-runs`: extract recurring strengths, waste patterns, risk signals, and variability across multiple runs
+- `sop-coverage-gap-analyzer`: compare observed work against standard documents under `data/work_item_descripton`
+- `prompt-and-pipeline-optimizer`: improve chunk-caption and report-synthesis prompts, plus propose rerun and pipeline experiments
+- `coaching-artifact-generator`: turn analysis results into worker, supervisor, training, or audit-ready coaching artifacts
 
 ### Version note
 

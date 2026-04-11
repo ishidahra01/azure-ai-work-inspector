@@ -35,7 +35,7 @@ def ensure_agent_workspace_state(session_state: Any) -> None:
         session_state.agent_workspace_messages = [
             {
                 "role": "assistant",
-                "content": "Azure Resource Analyzer ワークスペースです。左で会話し、右で成果物を更新できます。",
+                "content": "AI Work Inspector ワークスペースです。左で会話し、右で成果物を更新できます。",
             }
         ]
     if "agent_workspace_editor_text" not in session_state:

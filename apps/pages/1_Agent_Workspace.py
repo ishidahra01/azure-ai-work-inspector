@@ -18,6 +18,91 @@ from utils.agent_workspace import (
 from utils.result_manager import get_result_info, load_report
 
 
+SKILL_GUIDES = [
+    {
+        "key": "evidence-audit-confidence-map",
+        "title": "Evidence Audit",
+        "tag": "根拠監査",
+        "summary": "レポートの主張を chunk・timestamp・frame にさかのぼって、観測と推定を分けて整理します。",
+        "ask": "このレポートの主張を根拠監査して、直接観測・強い推定・弱い推定・根拠不足に分けて。",
+        "inputs": "report / metadata / frames",
+        "outputs": "信頼度マップ、根拠表、追加確認ポイント",
+    },
+    {
+        "key": "pattern-miner-across-runs",
+        "title": "Pattern Miner",
+        "tag": "横断分析",
+        "summary": "複数 run をまとめて読み、繰り返し出る良い癖、ムダ動作、リスク傾向を抽出します。",
+        "ask": "選択した run 全体から recurring pattern を抽出して、頻出のムダ動作と良い実践をまとめて。",
+        "inputs": "複数 results の report / metadata",
+        "outputs": "頻出パターン一覧、ばらつき、改善優先度",
+    },
+    {
+        "key": "sop-coverage-gap-analyzer",
+        "title": "SOP Coverage",
+        "tag": "標準書照合",
+        "summary": "作業標準書の各手順に対して、動画解析結果で確認済みか、未確認か、判定不能かを整理します。",
+        "ask": "この結果を標準書と突き合わせて、確認済み・未確認・判定不能を表にして。",
+        "inputs": "report / metadata / data/work_item_descripton",
+        "outputs": "手順カバレッジ表、ギャップ、追加確認項目",
+    },
+    {
+        "key": "prompt-and-pipeline-optimizer",
+        "title": "Prompt Optimizer",
+        "tag": "一次生成改善",
+        "summary": "chunk caption 用 prompt と最終 report 統合 prompt を見直し、一次生成品質を上げる改善案を作ります。",
+        "ask": "chunk caption prompt と report synthesis prompt を改善して。曖昧な caption と過剰推論を減らしたい。",
+        "inputs": "現在の prompt、弱い出力例、代表 report / metadata",
+        "outputs": "改訂 prompt、原因診断、実験計画",
+    },
+    {
+        "key": "coaching-artifact-generator",
+        "title": "Coaching Artifact",
+        "tag": "現場展開",
+        "summary": "分析結果を、作業者向け指導メモ、監督者向け要点、教育用ケースなどに変換します。",
+        "ask": "この分析結果から、作業者向けの短い指導メモと監督者向けの要約を作って。",
+        "inputs": "report / metadata / 必要なら標準書",
+        "outputs": "対象者別の成果物ドラフト",
+    },
+]
+
+
+def render_skill_cards() -> None:
+    columns = st.columns(len(SKILL_GUIDES), gap="small")
+    for column, guide in zip(columns, SKILL_GUIDES):
+        with column:
+            st.markdown(f"<div class='skill-card-tag'>{guide['tag']}</div>", unsafe_allow_html=True)
+            st.markdown(f"**{guide['title']}**")
+            st.caption(guide["summary"])
+
+
+def render_skill_navigator() -> None:
+    with st.expander("できることを見る", expanded=False):
+        st.markdown("<div class='navigator-title'>Skill Navigator</div>", unsafe_allow_html=True)
+        st.caption("必要なときだけ開いて、依頼の仕方を確認できます。")
+        render_skill_cards()
+
+        options = {f"{guide['title']} | {guide['tag']}": guide for guide in SKILL_GUIDES}
+        selected_label = st.selectbox(
+            "やりたい分析タイプ",
+            options=list(options.keys()),
+            help="選ぶと、この Skill が向いている依頼例と返ってくる成果物を確認できます。",
+        )
+        selected_guide = options[selected_label]
+
+        detail_left, detail_right = st.columns([3, 2], gap="large")
+        with detail_left:
+            st.markdown(f"### {selected_guide['title']}")
+            st.write(selected_guide["summary"])
+            st.markdown("**依頼例**")
+            st.code(selected_guide["ask"], language="text")
+        with detail_right:
+            st.markdown("**主な入力**")
+            st.write(selected_guide["inputs"])
+            st.markdown("**返ってくるもの**")
+            st.write(selected_guide["outputs"])
+
+
 def load_css() -> None:
     css_file = Path(__file__).resolve().parents[1] / "css" / "style.css"
     if css_file.exists():
@@ -33,6 +118,7 @@ load_css()
 
 st.markdown("<h1 class='page-title'>Agent Workspace</h1>", unsafe_allow_html=True)
 st.caption("生成済みの動画解析アーティファクトを再解釈・再編集するための 2 ペイン UI です。")
+render_skill_navigator()
 
 catalog = get_result_catalog()
 catalog_dirs = [item["dir"] for item in catalog]
@@ -135,6 +221,7 @@ left_pane, right_pane = st.columns([7, 5], gap="large")
 
 with left_pane:
     st.subheader("Chat")
+    st.info("上の Skill Navigator で用途を選び、依頼例をそのままチャットで使うと意図が伝わりやすくなります。")
     chat_container = st.container(height=640)
     with chat_container:
         for message in st.session_state.agent_workspace_messages:
@@ -173,7 +260,7 @@ with right_pane:
         else:
             st.info("まだログはありません。")
 
-prompt = st.chat_input("選択結果の比較、タイムスタンプ調査、レポート追記、標準書突合などを依頼")
+prompt = st.chat_input("根拠監査、横断分析、標準書照合、一次生成 prompt 改善、指導メモ作成などを依頼")
 
 if prompt:
     try:
